@@ -20,7 +20,9 @@ import {
   Globe,
   UtensilsCrossed,
   ExternalLink,
-  Info
+  Info,
+  AlertCircle,
+  XCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
@@ -59,6 +61,7 @@ export default function App() {
   const [language, setLanguage] = useState('English');
   const [recipe, setRecipe] = useState<RecipeResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isListening, setIsListening] = useState(false);
   const [dailySuggestion, setDailySuggestion] = useState<string>('');
@@ -125,13 +128,14 @@ export default function App() {
     setLoadingTrends(true);
     setExpandedTrend(null);
     setExpandedStates(null);
+    setError(null);
     try {
       const data = await fetchGlobalTrends(region);
       const filteredData = data.filter(t => t.imageUrl && t.imageUrl.startsWith('http'));
       setTrends(filteredData);
-    } catch (error: any) {
-      console.error(error);
-      alert("Failed to load trends: " + (error.message || "Quota Exhausted or AI Service Down."));
+    } catch (err: any) {
+      console.error(err);
+      setError("Failed to load trends: " + (err.message || "Quota Exhausted or AI Service Down."));
     } finally {
       setLoadingTrends(false);
     }
@@ -203,9 +207,9 @@ export default function App() {
       
       const sug = await suggestNewDishes(res.title, ingredients);
       setSuggestions(sug);
-    } catch (error: any) {
-      console.error(error);
-      alert("Failed to generate recipe: " + (error.message || "Quota Exhausted or AI Service Down. Please wait."));
+    } catch (err: any) {
+      console.error(err);
+      setError("Failed to generate recipe: " + (err.message || "Quota Exhausted or AI Service Down. Please wait."));
     } finally {
       setLoading(false);
     }
@@ -215,6 +219,7 @@ export default function App() {
     setIngredients([]);
     setRecipe(null);
     setSuggestions([]);
+    setError(null);
   };
 
   const copyToClipboard = () => {
@@ -271,6 +276,19 @@ Chef's Wisdom: "${recipe.chefQuote}"
           </button>
         </div>
       </div>
+
+      {/* Global Error Banner */}
+      {error && (
+        <div className="sketch-border border-red-500 bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-200 p-4 mb-8 flex justify-between items-center relative z-10 font-hand text-lg">
+          <div className="flex gap-2 items-center">
+            <AlertCircle className="w-5 h-5 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button onClick={() => setError(null)} className="hover:opacity-70 p-1" title="Dismiss error">
+            <XCircle className="w-5 h-5" />
+          </button>
+        </div>
+      )}
 
       {activeView === 'generator' ? (
         <>
