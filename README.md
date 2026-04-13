@@ -3,6 +3,10 @@
   
   <br />
 
+  > ⚠️ **NOTICE: This platform is currently UNDER MAINTENANCE.**
+  > 
+  > Due to AI model integration and API Quota migrations, Reciper is undergoing active maintenance. Some endpoints (like recipe generation or trend loading) may temporarily run on fallback modes or be unavailable.
+
   # 🍳 Reciper
   ### *Where Sketchbook Aesthetics Meet AI Gastronomy*
 
@@ -73,7 +77,5 @@ Reciper uses a modern hybrid architecture designed for **Vercel** serverless dep
 ---
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/platane/snk/output/github-contribution-grid-snake.svg" alt="Snake animation" />
-  <br />
   <p><i>Generated with passion for food and code.</i></p>
 </div>
