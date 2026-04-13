@@ -30,6 +30,7 @@ import {
   suggestNewDishes, 
   fetchGlobalTrends,
   fetchRecipeForTrend,
+  checkIngredientSpelling,
   type RecipeResponse, 
   type GlobalTrend
 } from '@/src/services/gemini';
@@ -126,11 +127,11 @@ export default function App() {
     setExpandedStates(null);
     try {
       const data = await fetchGlobalTrends(region);
-      // Filter out dishes without images as requested
       const filteredData = data.filter(t => t.imageUrl && t.imageUrl.startsWith('http'));
       setTrends(filteredData);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+      alert("Failed to load trends: " + (error.message || "Quota Exhausted or AI Service Down."));
     } finally {
       setLoadingTrends(false);
     }
@@ -170,7 +171,14 @@ export default function App() {
     // Basic sanitization: remove any HTML tags
     const sanitized = name.replace(/<[^>]*>?/gm, '').trim().toLowerCase();
     if (sanitized && !ingredients.includes(sanitized)) {
-      setIngredients([...ingredients, sanitized]);
+      setIngredients(prev => [...prev, sanitized]);
+      
+      // Background spell check
+      checkIngredientSpelling(sanitized).then((corrected) => {
+        if (corrected && corrected !== sanitized) {
+          setIngredients(current => current.map(i => i === sanitized ? corrected : i));
+        }
+      });
     }
     setInputIngredient('');
   };
@@ -182,6 +190,7 @@ export default function App() {
   const handleGenerate = async () => {
     if (ingredients.length === 0) return;
     setLoading(true);
+    setRecipe(null); // Clear previous if any
     try {
       const res = await generateRecipe(ingredients, dietary, interests, language, cuisine);
       setRecipe(res);
@@ -194,8 +203,9 @@ export default function App() {
       
       const sug = await suggestNewDishes(res.title, ingredients);
       setSuggestions(sug);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+      alert("Failed to generate recipe: " + (error.message || "Quota Exhausted or AI Service Down. Please wait."));
     } finally {
       setLoading(false);
     }

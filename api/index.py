@@ -98,8 +98,7 @@ client = genai.Client(api_key=api_key)
 # ── Model Hierarchy ───────────────────────────────────────────────────
 PRIMARY_MODEL = "gemma-4-31b-it"
 FALLBACK_MODELS = ["gemini-3-flash-preview", "gemini-2.5-flash"]
-AI_TIMEOUT_SECONDS = 55  # Stay under Vercel's 60s function limit
-
+AI_TIMEOUT_SECONDS = 30  # Give Gemma more time, but still prevent complete hangs
 
 # ── Pydantic Models ───────────────────────────────────────────────────
 class GenerateRequest(BaseModel):
@@ -112,23 +111,22 @@ class GenerateRequest(BaseModel):
 class TrendRequest(BaseModel):
     region: str = "Global"
 
+class SpellCheckRequest(BaseModel):
+    ingredient: str
 
 # ── Sync AI call wrapped for thread safety ────────────────────────────
-# The google-genai SDK is synchronous. Running it directly in an async
-# endpoint blocks the event loop. asyncio.to_thread() fixes this.
-
-def _sync_generate(model_id: str, prompt: str, schema: dict, use_search: bool) -> str:
+def _sync_generate(model_id: str, prompt: str, schema: dict, use_search: bool, thinking: bool = False) -> str:
     """Synchronous AI call — always run via asyncio.to_thread()."""
     config_params = {
         "response_mime_type": "application/json",
         "response_schema": schema,
     }
-    # Gemma 4 doesn't support thinking_config on all endpoints — skip it to avoid 400 errors
-    if model_id in FALLBACK_MODELS:
-        if use_search:
-            config_params["tools"] = [types.Tool(google_search=types.GoogleSearch())]
-    else:
-        # Gemma 4 — enable thinking for quality
+    
+    # gemini-2.5-flash throws 400 Bad Request if both tools AND JSON schema are used
+    if use_search and model_id == "gemini-3-flash-preview":
+        config_params["tools"] = [types.Tool(google_search=types.GoogleSearch())]
+        
+    if thinking and model_id == PRIMARY_MODEL:
         config_params["thinking_config"] = types.ThinkingConfig(include_thoughts=True)
 
     response = client.models.generate_content(
@@ -140,17 +138,14 @@ def _sync_generate(model_id: str, prompt: str, schema: dict, use_search: bool) -
 
 
 @retry(
-    stop=stop_after_attempt(2),
-    wait=wait_exponential(multiplier=1, min=2, max=8),
-    retry=retry_if_exception_type(Exception),
-    before_sleep=before_sleep_log(logger, logging.WARNING),
+    stop=stop_after_attempt(1), # Don't retry same model on timeout, fall back immediately!
     reraise=True,
 )
-async def _call_model(model_id: str, prompt: str, schema: dict, use_search: bool) -> Any:
-    """Async wrapper with tenacity retry (2 attempts, exponential backoff)."""
+async def _call_model(model_id: str, prompt: str, schema: dict, use_search: bool, thinking: bool = False) -> Any:
+    """Async wrapper. Removed tenacity long retries to ensure fast fallback."""
     logger.info(f"CALLING: {model_id} (search={use_search})")
     raw = await asyncio.wait_for(
-        asyncio.to_thread(_sync_generate, model_id, prompt, schema, use_search),
+        asyncio.to_thread(_sync_generate, model_id, prompt, schema, use_search, thinking),
         timeout=AI_TIMEOUT_SECONDS,
     )
     result = json.loads(raw)
@@ -158,20 +153,20 @@ async def _call_model(model_id: str, prompt: str, schema: dict, use_search: bool
     return result
 
 
-async def generate(prompt: str, schema: dict, use_search_on_fallback: bool = True) -> Any:
+async def generate(prompt: str, schema: dict, use_search_on_fallback: bool = True, thinking: bool = True) -> Any:
     """
     Gemma 4 → Gemini fallbacks. Runs in thread pool to avoid blocking.
     """
-    # 1. Try Gemma 4 (primary, no google_search)
+    # 1. Try Gemma 4
     try:
-        return await _call_model(PRIMARY_MODEL, prompt, schema, use_search=False)
+        return await _call_model(PRIMARY_MODEL, prompt, schema, use_search=False, thinking=thinking)
     except Exception as e:
-        logger.warning(f"PRIMARY ({PRIMARY_MODEL}) failed: {str(e)[:100]}")
+        logger.warning(f"PRIMARY ({PRIMARY_MODEL}) failed or timed out: {str(e)[:100]}")
 
-    # 2. Try Gemini fallbacks (with optional live search)
+    # 2. Try Gemini fallbacks
     for model_id in FALLBACK_MODELS:
         try:
-            return await _call_model(model_id, prompt, schema, use_search=use_search_on_fallback)
+            return await _call_model(model_id, prompt, schema, use_search=use_search_on_fallback, thinking=False)
         except Exception as e:
             logger.warning(f"FALLBACK ({model_id}) failed: {str(e)[:100]}")
             continue
@@ -183,6 +178,32 @@ async def generate(prompt: str, schema: dict, use_search_on_fallback: bool = Tru
 
 
 # ── Routes ────────────────────────────────────────────────────────────
+@app.post("/api/spellcheck")
+@rate_limit(max_calls=40, window_seconds=60)
+async def check_spelling(request: Request, req: SpellCheckRequest):
+    """Extremely fast background check using caching + fast model specifically."""
+    ingred = req.ingredient.strip().lower()
+    if not ingred:
+        return {"corrected": ""}
+        
+    cache_key = _cache_key("spellcheck", {"i": ingred})
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    prompt = f'Check if "{req.ingredient}" is a valid food ingredient. IF it is a typo, fix the spelling. Output JSON with "corrected": "fixed_name". Keep it brief.'
+    schema = {"type": "OBJECT", "properties": {"corrected": {"type": "STRING"}}}
+    
+    # Bypass Gemma 4 for spellcheck, as we need it to be sub-second
+    try:
+        result = await _call_model("gemini-3-flash-preview", prompt, schema, use_search=False, thinking=False)
+        cache_set(cache_key, result, 3600)  # cache typos for a long time
+        return result
+    except Exception as e:
+        # If AI fails, just return original to avoid breaking the UX
+        return {"corrected": req.ingredient}
+
+
 @app.post("/api/trends")
 @rate_limit(max_calls=15, window_seconds=60)
 async def get_trends(request: Request, req: TrendRequest):

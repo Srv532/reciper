@@ -90,3 +90,12 @@ export async function suggestNewDishes(
     interests: [previousRecipe]
   });
 }
+
+export async function checkIngredientSpelling(ingredient: string): Promise<string> {
+  try {
+    const res = await request('/spellcheck', { ingredient });
+    return res.corrected || ingredient;
+  } catch (e) {
+    return ingredient;
+  }
+}
