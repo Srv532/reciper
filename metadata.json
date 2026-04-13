@@ -1,0 +1,5 @@
+{
+  "name": "Reciper",
+  "description": "An AI-powered recipe generator with a hand-drawn sketchbook aesthetic. Input your ingredients and get authentic recipes, chef wisdom, and community feedback.",
+  "requestFramePermissions": ["microphone"]
+}

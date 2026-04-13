@@ -1,0 +1,77 @@
+@import url('https://fonts.googleapis.com/css2?family=Kalam:wght@300;400;700&family=Patrick+Hand&family=Inter:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-hand: "Patrick Hand", cursive;
+  --font-sketch: "Kalam", cursive;
+
+  --color-bg: #fdfaf6;
+  --color-ink: #2d2d2d;
+  --color-card: #ffffff;
+  --color-border: #2d2d2d;
+}
+
+.dark {
+  --color-bg: #1a1a1a;
+  --color-ink: #fdfaf6;
+  --color-card: #2d2d2d;
+  --color-border: #fdfaf6;
+}
+
+@layer base {
+  body {
+    @apply bg-bg text-ink font-sans transition-colors duration-300;
+    background-image: radial-gradient(color-mix(in srgb, var(--color-ink), transparent 90%) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+}
+
+@layer components {
+  .sketch-border {
+    border: 2px solid var(--color-border);
+    border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+  }
+
+  .sketch-shadow {
+    box-shadow: 5px 5px 0px rgba(0, 0, 0, 0.1);
+  }
+
+  .sketch-card {
+    border: 2px solid var(--color-border);
+    border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+    box-shadow: 5px 5px 0px rgba(0, 0, 0, 0.1);
+    @apply bg-card p-6 transition-colors duration-300;
+  }
+
+  .sketch-button {
+    border: 2px solid var(--color-border);
+    border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+    box-shadow: 5px 5px 0px rgba(0, 0, 0, 0.1);
+    @apply px-4 py-2 font-sketch font-bold transition-all active:translate-x-[2px] active:translate-y-[2px] active:shadow-none;
+  }
+
+  .sketch-input {
+    border: 2px solid var(--color-border);
+    border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+    @apply px-4 py-2 bg-card text-ink focus:outline-none focus:ring-2 focus:ring-ink/5 transition-colors duration-300;
+  }
+}
+
+/* Markdown styling for the hand-drawn look */
+.prose-sketch {
+  @apply font-hand text-lg leading-relaxed;
+}
+
+.prose-sketch h1, .prose-sketch h2, .prose-sketch h3 {
+  @apply font-sketch font-bold mb-4 mt-6;
+}
+
+.prose-sketch ul {
+  @apply list-disc list-inside mb-4;
+}
+
+.prose-sketch ol {
+  @apply list-decimal list-inside mb-4;
+}
+
